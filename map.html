@@ -1,0 +1,175 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title></title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no, width=device-width">
+    <link rel="stylesheet" href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css" />
+    <link rel="stylesheet" href="https://cache.amap.com/lbs/static/main1119.css" />
+    <style>
+        html,
+        body,
+        #container {
+            width: 100%;
+            height: 100%;
+        }
+        .amap-icon img,
+        .amap-marker-content img {
+            width: 25px;
+            height: 34px;
+        }
+
+        .marker {
+            position: absolute;
+            top: -20px;
+            right: -118px;
+            color: #fff;
+            padding: 4px 10px;
+            box-shadow: 1px 1px 1px rgba(10, 10, 10, .2);
+            white-space: nowrap;
+            font-size: 12px;
+            font-family: "";
+            background-color: #25A5F7;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="myPageTop" style="left: 10px;right: auto;">
+        <table>
+            <tr>
+                <td>
+                    <label>请输入关键字：</label>
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <input id="tipinput" />
+                </td>
+            </tr>
+        </table>
+    </div>
+    <!-- 加载地图JSAPI脚本 -->
+    <script src="https://webapi.amap.com/maps?v=1.4.15&key=333fb04150285575e77c32d1e25c3bed&plugin=AMap.Autocomplete,AMap.PlaceSearch"></script>
+    <script>
+        window.onload = function () {
+            var Lng, Lat, marker;
+            var map = new AMap.Map('container', {
+                resizeEnable: true, //是否监控地图容器尺寸变化
+                zoom: 10, //初始化地图层级
+                center: [116.397428, 39.90923], //初始化地图中心点
+                lang: "zh_cn" //可选值：en，zh_en, zh_cn
+            });
+            //响应鼠标单击事件
+            map.on('click', function (e) {
+                //Lng = e.lnglat.getLng() - 0.0062;
+                //Lat = e.lnglat.getLat() - 0.0015;
+                if (marker) {
+                    marker.setMap(null);
+                }
+                marker = new AMap.Marker({
+                    //icon: "poi-marker-default.png",
+                    position: [e.lnglat.getLng(), e.lnglat.getLat()],
+                    offset: new AMap.Pixel(-13, -30)
+                });
+                marker.setMap(map);
+                //window.external.onMapClick(Lng, Lat);
+                var gps = GcjToWgs(e.lnglat.getLng(), e.lnglat.getLat());
+                window.external.onMapClick(gps.Lon, gps.Lat);
+            });
+            //输入提示
+            var autoOptions = {
+                input: "tipinput"
+            };
+            var auto = new AMap.Autocomplete(autoOptions);
+            var placeSearch = new AMap.PlaceSearch();  //构造地点查询类
+            AMap.event.addListener(auto, "select", function (e) {
+                if (marker) {
+                    marker.setMap(null);
+                }
+                placeSearch.search(e.poi.name, function (status, result) {
+                    var poi = e.poi;
+                    marker = new AMap.Marker({
+                        position: poi.location,   // 经纬度对象，也可以是经纬度构成的一维数组[116.39, 39.9]
+                        title: poi.name
+                    });
+                    marker.setMap(map);
+                    map.setCenter([poi.location.getLng(), poi.location.getLat()]);
+                    map.setZoom(15);
+                    var gps = GcjToWgs(poi.location.getLng(), poi.location.getLat());
+                    window.external.onMapClick(gps.Lon, gps.Lat);
+                });
+            });//注册监听，当选中某条记录时会触发
+
+            function changePoint(lng, lat) {
+                if (marker) {
+                    marker.setMap(null);
+                }
+                marker = new AMap.Marker({
+                    position: [lng, lat],
+                    offset: new AMap.Pixel(-13, -30)
+                });
+                marker.setMap(map);
+                map.setCenter([lng, lat]);
+            };
+        }
+
+        //高德坐标转gps坐标
+        this.GcjToWgs = function (Longitude, Latitude) {
+            var Dev = CalDev(Longitude, Latitude);
+            var RetLat = Latitude - Dev.Lat;
+            var RetLon = Longitude - Dev.Lon;
+            Dev = this.CalDev(RetLon, RetLat);
+            RetLat = Latitude - Dev.Lat;
+            RetLon = Longitude - Dev.Lon;
+            return { Lon: RetLon, Lat: RetLat };
+        }
+        /*********计算偏差***************/
+        this.CalDev = function (WgLon, WgLat) {
+            var ee = 0.00669342162296594323;
+            var a = 6378245.0;
+            if (IsOutOfChina(WgLon, WgLat)) {
+                return { Lon: 0, Lat: 0 };
+            }
+            var Lat = CalLat(WgLon - 105.0, WgLat - 35.0);
+            var Lon = CalLon(WgLon - 105.0, WgLat - 35.0);
+            var RadLat = WgLat / 180.0 * Math.PI;
+            var Magic = Math.sin(RadLat);
+            Magic = 1 - ee * Magic * Magic;
+            var sqrtMagic = Math.sqrt(Magic);
+            Lat = (Lat * 180.0) / ((a * (1 - ee)) / (Magic * sqrtMagic) * Math.PI);
+            Lon = (Lon * 180.0) / (a / sqrtMagic * Math.cos(RadLat) * Math.PI);
+            return { Lon: Lon, Lat: Lat };
+        }
+        /******判断坐标是否在国外******/
+        this.IsOutOfChina = function (Lon, Lat) {
+            if (Lon < 72.004 || Lon > 137.8347) {
+                return true;
+            }
+            if (Lat < 0.8293 || Lat > 55.8271) {
+                return true;
+            }
+            return false;
+        }
+        /****** 计算纬度******/
+        this.CalLat = function (X, Y) {
+            var ResultLat = -100.0 + 2.0 * X + 3.0 * Y + 0.2 * Y * Y + 0.1 * X * Y + 0.2 * Math.sqrt(Math.abs(X));
+            ResultLat += (20.0 * Math.sin(6.0 * X * Math.PI) + 20.0 * Math.sin(2.0 * X * Math.PI)) * 2.0 / 3.0;
+            ResultLat += (20.0 * Math.sin(Y * Math.PI) + 40.0 * Math.sin(Y / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ResultLat += (160.0 * Math.sin(Y / 12.0 * Math.PI) + 320 * Math.sin(Y * Math.PI / 30.0)) * 2.0 / 3.0;
+            return ResultLat;
+        }
+        /******计算经度******/
+        this.CalLon = function (X, Y) {
+            var ResultLon = 300.0 + X + 2.0 * Y + 0.1 * X * X + 0.1 * X * Y + 0.1 * Math.sqrt(Math.abs(X));
+            ResultLon += (20.0 * Math.sin(6.0 * X * Math.PI) + 20.0 * Math.sin(2.0 * X * Math.PI)) * 2.0 / 3.0;
+            ResultLon += (20.0 * Math.sin(X * Math.PI) + 40.0 * Math.sin(X / 3.0 * Math.PI)) * 2.0 / 3.0;
+            ResultLon += (150.0 * Math.sin(X / 12.0 * Math.PI) + 300.0 * Math.sin(X / 30.0 * Math.PI)) * 2.0 / 3.0;
+            return ResultLon;
+        }
+    </script>
+</body>
+</html>
